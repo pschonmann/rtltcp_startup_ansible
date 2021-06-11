@@ -1,0 +1,16 @@
+[Unit]
+Description=RTL-SDR Server
+
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/local/bin/rtl_tcp -a 0.0.0.0
+StandardOutput=inherit
+StandardError=inherit
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

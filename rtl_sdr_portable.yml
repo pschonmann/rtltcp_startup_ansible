@@ -1,0 +1,80 @@
+---
+#####
+#The idea is from the page
+#http://fuzzthepiguy.tech/rtlsdr/
+######
+- hosts: all
+  become: yes
+  vars:
+    git_clone_dir: /tmp/rtl-sdr-git-repo
+    build_directory: /tmp/rtl-sdr-git-repo/build
+  tasks:
+    - name: Upgrade the OS before start
+      apt:
+       upgrade: safe
+       update_cache: yes
+    - name: Install packages git cmake pkg-config libusb-1.0-0-dev
+      apt:
+        pkg:
+         - git
+         - cmake
+         - pkg-config
+         - libusb-1.0-0-dev
+    - name: Download GIT repo from osmocom
+      git:
+       repo: git://git.osmocom.org/rtl-sdr.git
+       dest: "{{ git_clone_dir }}"
+    - name: Create a directory build
+      file:
+        path: "{{ build_directory }}"
+        state: directory
+        mode: '0755'
+    - name: Change the working to /tmp/rtl-sdr-git-repo and run cmake
+      shell: cmake ../ -DINSTALL_UDEV_RULES=ON
+      args:
+        chdir: "{{ build_directory }}"
+    - name: Build - make -j4
+      make:
+        chdir: "{{ build_directory }}"
+        params:
+          NUM_THREADS: 4
+    - name: Run 'install' target as root
+      make:
+        chdir: "{{ build_directory }}"
+        target: install
+      become: yes
+    #sudo cp ../rtl-sdr.rules /etc/udev/rules.d/
+    - name: copy {{ git_clone_dir }}/debian/librtlsdr0.udev to /etc/udev/rules.d/
+      copy:
+        src: "{{ git_clone_dir }}/debian/librtlsdr0.udev"
+        dest: /etc/udev/rules.d/rtl-sdr.rules
+        remote_src: yes
+      become: yes
+    - name: ldconfig
+      shell: ldconfig
+      become: yes
+    - name: Blacklist modules
+      kernel_blacklist:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - dvb_usb_rtl28xxu
+        - rtl2832
+        - rtl2830
+      tags: conf_blacklist
+    - name: create systemd unit for rtlsdr.service
+      template:
+        src: files/rtlsdr.service
+        dest: /etc/systemd/system/rtlsdr.service
+        owner: root
+        group: root
+        mode: 0644
+      tags: conf_systemd
+    - name: enable a rtlsdr systemd unit and start
+      systemd:
+        name: rtlsdr.service
+        state: started
+        enabled: yes
+      tags: conf_systemd
+
+
